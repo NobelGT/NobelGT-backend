@@ -111,18 +111,20 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
         self.isCancelled = True
 
     def sendProgress(self, schedule, score, progress):
-        data = {}
+        data = {"COMMAND": "PROGRESS", "PARAMETERS": {}}
+
+        # TODO: Add progress enveloping
 
         self.sendMessage(json.dump(data))
 
     def sendCompletion(self):
-        data = {}
+        data = {"COMMAND": "COMPLETION"}
 
         self.sendMessage(json.dump(data))
         self.disconnect()
 
-    def sendError(self):
-        data = {}
+    def sendError(self, error):
+        data = {"COMMAND": "ERROR", "PARAMETERS": {"MESSAGE": error}}
 
         self.sendMessage(json.dump(data))
 
