@@ -1,22 +1,11 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
-from random import randint
 
-import json
 import config
 import math
 import numpy as np
-from models import Course, Section
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from twisted.internet import reactor, threads
 from score import score
-import heapq
-engine = create_engine(config.SQLALCHEMY_DATABASE_URI)
-
-DBSession = sessionmaker(bind=engine)
-session = DBSession()
-
-am = 0
 
 def produceMatrix(chosenSections):
     schedule = np.empty(7, dtype=object)
@@ -38,18 +27,24 @@ def produceMatrix(chosenSections):
 
     return schedule
 
-def solve2(nCourse, sectionsForCourse, slns, chosenSections, start, end, freeDays):
+def solve2(socket, nCourse, sectionsForCourse, chosenSections, timeEquivalencies, start, end, freeDays):
+    # TODO: A better implementation here?
+    if nCourse <= 4:
+        cancelled = threads.blockingCallFromThread(socket.isCancelled)
+        if cancelled:
+            raise ValueError("The request has been cancelled")
+
     if nCourse == len(sectionsForCourse):
         schedule = produceMatrix(chosenSections)
 
         if schedule is not None:
-            priority = -1 * score(schedule, start, end, freeDays)
+            sc = score(schedule, start, end, freeDays)
 
-            global am
-            am += 1
-            heapq.heappush(slns, (priority, am, schedule))
-
-            #print 'Found solution ' + str(len(slns)) + '.'
+            # We can push the thing back! Hooray!
+            # TODO: Call it without fucking up
+            # TODO: Add progress
+            progress = 0
+            reactor.callFromThread(socket.sendProgress, schedule, sc, progress)
 
         return
 
@@ -58,11 +53,12 @@ def solve2(nCourse, sectionsForCourse, slns, chosenSections, start, end, freeDay
 
     for section in sections:
         chosenSections[nCourse] = section
-        solve2(nCourse + 1, sectionsForCourse, slns, chosenSections, start, end, freeDays)
+        solve2(nCourse + 1, sectionsForCourse, chosenSections, start, end, freeDays)
 
-def getSolutions(courses, start, end, freeDays):
+def startSolution(socket, courses, start, end, freeDays):
     solutions = []
     sectionsForCourse = []
+    timeEquivalencies = {}
     for course in courses:
         if course is not None:
             sectionsForThisCourse = {}
@@ -72,15 +68,18 @@ def getSolutions(courses, start, end, freeDays):
 
                 if not hash in sectionsForThisCourse:
                     sectionsForThisCourse[hash] = section
+                else:
+                    timeEquivalentSection = sectionsForThisCourse[hash]
+
+                    if not section in timeEquivalencies:
+                        timeEquivalencies[timeEquivalentSection] = []
+
+                    timeEquivalencies[timeEquivalentSection].append(section)
 
             sectionsForCourse.append((course, [value for key,value in sectionsForThisCourse.iteritems()]))
 
-    schedule = np.empty(7, dtype=object)
-    for i in range(0, len(schedule)):
-        schedule[i] = np.empty(config.SLOTS_PER_DAY, dtype=object)
-
     chosenSections = np.empty(len(sectionsForCourse), dtype=object)
 
-    solve2(0, sectionsForCourse, solutions, chosenSections, start, end, freeDays)
+    solve2(socket, 0, sectionsForCourse, chosenSections, timeEquivalencies, start, end, freeDays)
 
-    return solutions
+    reactor.callFromThread(socket.sendCompletion)
