@@ -15,6 +15,9 @@ import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+engine = create_engine(config.SQLALCHEMY_DATABASE_URI, connect_args={'check_same_thread': False})
+DBSession = sessionmaker(bind=engine)
+
 def datetimestrptime(time_string,time_fmt):
      t = time.strptime(time_string,time_fmt)
      return datetime.time(hour=t.tm_hour,minute=t.tm_min,second=t.tm_sec)
@@ -23,7 +26,9 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
     def __init__(self):
         WebSocketServerProtocol.__init__(self)
         log.msg(u"[INFO] Starting new protocol instance")
-        self.isCancelled = False
+        self.cancelled = False
+        self.session = DBSession()
+
 
     def onConnect(self, request):
         print("Client connecting: {0}".format(request.peer))
@@ -33,7 +38,7 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
 
     def onMessage(self, payload, isBinary):
         if not isBinary:
-            data = json.load(payload.decode('utf8'))
+            data = json.loads(payload.decode('utf8'))
 
             if data.get("COMMAND") == "REQUEST":
                 parameters = data.get("PARAMETERS")
@@ -41,11 +46,11 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
                     self.startSolution(parameters)
                 except ValueError as e:
                     self.sendError(e.message)
-                    self.disconnect()
 
 
     def onClose(self, wasClean, code, reason):
         self.cancelSolution()
+        self.session.close()
         print("WebSocket connection closed: {0}".format(reason))
 
     def startSolution(self, parameters):
@@ -68,6 +73,7 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
 
         courseData = courses.split(',')
         chosenCourses = []
+        credits = 0
         for courseItem in courseData:
             fullCourse = courseItem.strip()
             courseParts = fullCourse.split(" ")
@@ -78,12 +84,16 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
             dept = courseParts[0]
             code = courseParts[1]
 
-            course = self.factory.session.query(Course).filter(Course.department_code == dept).filter(Course.course_number == code).first()
+            course = self.session.query(Course).filter(Course.department_code == dept).filter(Course.course_number == code).first()
 
             if course is None:
-                raise ValueError("A course you specified cannot be found: %s. Please make sure it is being offered this semester, at GT's Atlanta campus.")
+                raise ValueError("A course you specified cannot be found: %s. Please make sure it is being offered this semester, at GT's Atlanta campus." % fullCourse)
 
             chosenCourses.append(course)
+            credits = credits + course.credit_hours
+
+        if credits > 21:
+            raise ValueError("At Georgia Tech, you can only take up to 21 credit hours. Your current selection adds up to $d." % credits)
 
         if len(chosenCourses) == 0:
             raise ValueError("You must specify at least one course.")
@@ -108,41 +118,74 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
         reactor.callInThread(startSolution, self, chosenCourses, startTime, endTime, intFreeDays)
 
     def cancelSolution(self):
-        self.isCancelled = True
+        self.cancelled = True
 
-    def sendProgress(self, schedule, score, progress):
-        data = {"COMMAND": "PROGRESS", "PARAMETERS": {}}
+    def sendProgress(self, sections, timeEquivalencies, score, progress):
+        data = {"COMMAND": "PROGRESS"}
 
-        # TODO: Add progress enveloping
+        courses = []
 
-        self.sendMessage(json.dump(data))
+        for section in sections:
+            code = section.course.department.code + " " + section.course.course_number
+            creditHours = section.course.credit_hours
+            name = section.course.name
+
+            timeEquivalents = []
+            timeEquivalents.append({
+                'crn' : section.crn,
+                'code' : section.code
+            })
+
+            foundEquivalents = timeEquivalencies.get(section)
+            if foundEquivalents is not None:
+                for equivalent in foundEquivalents:
+                    timeEquivalents.append({
+                        'crn' : equivalent.crn,
+                        'code' : equivalent.code
+                    })
+
+            sessions = []
+            for sess in section.sessions:
+                sessions.append({
+                    'day' : sess.day,
+                    'instructors' : sess.instructors,
+                    'location' : sess.location.name + " " + sess.room,
+                    'type' : sess.type,
+                    'startTime' : sess.start_time.strftime("%I:%M %p"),
+                    'endTime' : sess.end_time.strftime("%I:%M %p")
+                })
+
+
+            courseObject = {'code': code, 'name': name, 'credit_hours': creditHours, 'sessions': sessions, 'sections': timeEquivalents}
+            courses.append(courseObject)
+
+        parameters = {'progress': progress, 'courses': courses}
+        data["PARAMETERS"] = parameters
+        self.sendMessage(json.dumps(data))
 
     def sendCompletion(self):
         data = {"COMMAND": "COMPLETION"}
 
-        self.sendMessage(json.dump(data))
-        self.disconnect()
+        self.sendMessage(json.dumps(data))
+        self.sendClose()
 
     def sendError(self, error):
         data = {"COMMAND": "ERROR", "PARAMETERS": {"MESSAGE": error}}
 
-        self.sendMessage(json.dump(data))
+        self.sendMessage(json.dumps(data))
+        self.sendClose()
 
     def isCancelled(self):
-        return self.isCancelled
+        return self.cancelled
 
     def cancelRealized(self):
-        self.isCancelled = False
+        self.cancelled = False
 
 class NobelGTServerFactory(WebSocketServerFactory):
     protocol = NobelGTServerProtocol
 
-    def __init__(self, url, session):
+    def __init__(self, url):
         WebSocketServerFactory.__init__(self, url)
-
-        engine = create_engine(config.SQLALCHEMY_DATABASE_URI)
-        DBSession = sessionmaker(bind=engine)
-        self.session = DBSession()
 
 if __name__ == '__main__':
     import sys
