@@ -7,6 +7,21 @@ import numpy as np
 from twisted.internet import reactor, threads
 from score import score
 
+class ProgressBox:
+    def __init__(self, nPossibilities):
+        self.nPossibilities = nPossibilities
+        self.nCompleted = 0
+
+    def getProgress(self):
+        return float(self.nCompleted) / self.nPossibilities
+
+    def getPercentProgress(self):
+        return (self.nCompleted * 100) / self.nPossibilities
+
+    def addCompleted(self):
+        if self.nCompleted < self.nPossibilities:
+            self.nCompleted = self.nCompleted + 1
+
 def produceMatrix(chosenSections):
     schedule = np.empty(7, dtype=object)
     for i in range(0,7):
@@ -27,24 +42,29 @@ def produceMatrix(chosenSections):
 
     return schedule
 
-def solve2(socket, nCourse, sectionsForCourse, chosenSections, timeEquivalencies, start, end, freeDays):
+def solve2(socket, nCourse, sectionsForCourse, chosenSections, timeEquivalencies, progressBox, start, end, freeDays):
     # TODO: A better implementation here?
-    if nCourse <= 4:
-        cancelled = threads.blockingCallFromThread(socket.isCancelled)
+    if nCourse <= 3:
+        cancelled = threads.blockingCallFromThread(reactor, socket.isCancelled)
         if cancelled:
             raise ValueError("The request has been cancelled")
 
     if nCourse == len(sectionsForCourse):
         schedule = produceMatrix(chosenSections)
+        progressBox.addCompleted()
 
         if schedule is not None:
             sc = score(schedule, start, end, freeDays)
 
             # We can push the thing back! Hooray!
-            # TODO: Call it without fucking up
-            # TODO: Add progress
-            progress = 0
-            reactor.callFromThread(socket.sendProgress, schedule, sc, progress)
+            progress = progressBox.getPercentProgress()
+
+            # Copy sections
+            chosenSectionsForOutput = []
+            for chosenSection in chosenSections:
+                chosenSectionsForOutput.append(chosenSection)
+
+            reactor.callFromThread(socket.sendProgress, chosenSectionsForOutput, timeEquivalencies, sc, progress)
 
         return
 
@@ -53,12 +73,14 @@ def solve2(socket, nCourse, sectionsForCourse, chosenSections, timeEquivalencies
 
     for section in sections:
         chosenSections[nCourse] = section
-        solve2(nCourse + 1, sectionsForCourse, chosenSections, start, end, freeDays)
+        solve2(socket, nCourse + 1, sectionsForCourse, chosenSections, timeEquivalencies, progressBox, start, end, freeDays)
 
 def startSolution(socket, courses, start, end, freeDays):
     solutions = []
     sectionsForCourse = []
     timeEquivalencies = {}
+
+    nPossibilities = 1
     for course in courses:
         if course is not None:
             sectionsForThisCourse = {}
@@ -76,10 +98,14 @@ def startSolution(socket, courses, start, end, freeDays):
 
                     timeEquivalencies[timeEquivalentSection].append(section)
 
-            sectionsForCourse.append((course, [value for key,value in sectionsForThisCourse.iteritems()]))
+            sectionList = [value for key,value in sectionsForThisCourse.iteritems()]
+            sectionsForCourse.append((course, sectionList))
+
+            nPossibilities = nPossibilities * len(sectionList)
 
     chosenSections = np.empty(len(sectionsForCourse), dtype=object)
+    progressBox = ProgressBox(nPossibilities)
 
-    solve2(socket, 0, sectionsForCourse, chosenSections, timeEquivalencies, start, end, freeDays)
+    solve2(socket, 0, sectionsForCourse, chosenSections, timeEquivalencies, progressBox, start, end, freeDays)
 
     reactor.callFromThread(socket.sendCompletion)
