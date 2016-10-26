@@ -106,10 +106,10 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
 
         try:
             intFreeDays = int(freeDays)
-            if intFreeDays <= 0:
+            if intFreeDays < 0:
                 raise ValueError("Negative Value!")
         except ValueError:
-            raise ValueError("You specified an invalid number of free days. It needs to be a positive integer.")
+            raise ValueError("You specified an invalid number of free days. It needs to be a nonnegative integer.")
 
         reactor.callInThread(startSolution, self, chosenCourses, startTime, endTime, intFreeDays)
 
