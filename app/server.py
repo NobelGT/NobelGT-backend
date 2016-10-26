@@ -31,10 +31,7 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
 
 
     def onConnect(self, request):
-        print("Client connecting: {0}".format(request.peer))
-
-    def onOpen(self):
-        print("Incoming connection open.")
+        log.msg("Client connecting: {0}".format(request.peer))
 
     def onMessage(self, payload, isBinary):
         if not isBinary:
@@ -51,7 +48,6 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
     def onClose(self, wasClean, code, reason):
         self.cancelSolution()
         self.session.close()
-        print("WebSocket connection closed: {0}".format(reason))
 
     def startSolution(self, parameters):
         courses = parameters.get('listCourses')
@@ -159,7 +155,7 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
             courseObject = {'code': code, 'name': name, 'credit_hours': creditHours, 'sessions': sessions, 'sections': timeEquivalents}
             courses.append(courseObject)
 
-        parameters = {'progress': progress, 'courses': courses}
+        parameters = {'progress': progress, 'score': score, 'courses': courses}
         data["PARAMETERS"] = parameters
         self.sendMessage(json.dumps(data))
 
@@ -190,15 +186,9 @@ class NobelGTServerFactory(WebSocketServerFactory):
 if __name__ == '__main__':
     import sys
 
-    from twisted.python import log
-
     log.startLogging(sys.stdout)
 
     factory = NobelGTServerFactory(u"ws://127.0.0.1:9000")
-    factory.protocol = NobelGTServerProtocol
-    # factory.setProtocolOptions(maxConnections=2)
-
-    # note to self: if using putChild, the child must be bytes...
 
     reactor.listenTCP(9000, factory)
     reactor.run()
