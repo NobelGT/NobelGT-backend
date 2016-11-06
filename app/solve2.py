@@ -45,6 +45,9 @@ def produceMatrix(chosenSections):
 def solve2(socket, nCourse, sectionsForCourse, chosenSections, timeEquivalencies, progressBox, start, end, freeDays):
     # TODO: A better implementation here?
     if nCourse <= 3:
+        progress = progressBox.getPercentProgress()
+        reactor.callFromThread(socket.sendProgress, progress)
+
         cancelled = threads.blockingCallFromThread(reactor, socket.isCancelled)
         if cancelled:
             raise ValueError("The request has been cancelled")
@@ -52,19 +55,17 @@ def solve2(socket, nCourse, sectionsForCourse, chosenSections, timeEquivalencies
     if nCourse == len(sectionsForCourse):
         schedule = produceMatrix(chosenSections)
         progressBox.addCompleted()
+        progress = progressBox.getPercentProgress()
 
         if schedule is not None:
             sc = score(schedule, start, end, freeDays)
-
-            # We can push the thing back! Hooray!
-            progress = progressBox.getPercentProgress()
 
             # Copy sections
             chosenSectionsForOutput = []
             for chosenSection in chosenSections:
                 chosenSectionsForOutput.append(chosenSection)
 
-            reactor.callFromThread(socket.sendProgress, chosenSectionsForOutput, timeEquivalencies, sc, progress)
+            reactor.callFromThread(socket.sendProgress, progress, chosenSectionsForOutput, timeEquivalencies, sc)
 
         return
 

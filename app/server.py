@@ -116,46 +116,50 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
     def cancelSolution(self):
         self.cancelled = True
 
-    def sendProgress(self, sections, timeEquivalencies, score, progress):
+    def sendProgress(self, progress, sections=None, timeEquivalencies=None, score=None):
         data = {"COMMAND": "PROGRESS"}
+        parameters = {'progress': progress}
 
-        courses = []
+        if sections is not None and timeEquivalencies is not None and score is not None:
+            courses = []
 
-        for section in sections:
-            code = section.course.department.code + " " + section.course.course_number
-            creditHours = section.course.credit_hours
-            name = section.course.name
+            for section in sections:
+                code = section.course.department.code + " " + section.course.course_number
+                creditHours = section.course.credit_hours
+                name = section.course.name
 
-            timeEquivalents = []
-            timeEquivalents.append({
-                'crn' : section.crn,
-                'code' : section.code
-            })
-
-            foundEquivalents = timeEquivalencies.get(section)
-            if foundEquivalents is not None:
-                for equivalent in foundEquivalents:
-                    timeEquivalents.append({
-                        'crn' : equivalent.crn,
-                        'code' : equivalent.code
-                    })
-
-            sessions = []
-            for sess in section.sessions:
-                sessions.append({
-                    'day' : sess.day,
-                    'instructors' : sess.instructors,
-                    'location' : sess.location.name + " " + sess.room,
-                    'type' : sess.type,
-                    'startTime' : sess.start_time.strftime("%I:%M %p"),
-                    'endTime' : sess.end_time.strftime("%I:%M %p")
+                timeEquivalents = []
+                timeEquivalents.append({
+                    'crn' : section.crn,
+                    'code' : section.code
                 })
 
+                foundEquivalents = timeEquivalencies.get(section)
+                if foundEquivalents is not None:
+                    for equivalent in foundEquivalents:
+                        timeEquivalents.append({
+                            'crn' : equivalent.crn,
+                            'code' : equivalent.code
+                        })
 
-            courseObject = {'code': code, 'name': name, 'credit_hours': creditHours, 'sessions': sessions, 'sections': timeEquivalents}
-            courses.append(courseObject)
+                sessions = []
+                for sess in section.sessions:
+                    sessions.append({
+                        'day' : sess.day,
+                        'instructors' : sess.instructors,
+                        'location' : sess.location.name + " " + sess.room,
+                        'type' : sess.type,
+                        'startTime' : sess.start_time.strftime("%I:%M %p"),
+                        'endTime' : sess.end_time.strftime("%I:%M %p")
+                    })
 
-        parameters = {'progress': progress, 'score': score, 'courses': courses}
+
+                courseObject = {'code': code, 'name': name, 'credit_hours': creditHours, 'sessions': sessions, 'sections': timeEquivalents}
+                courses.append(courseObject)
+
+            parameters['score'] = score
+            parameters['courses'] = courses
+
         data["PARAMETERS"] = parameters
         self.sendMessage(json.dumps(data))
 
