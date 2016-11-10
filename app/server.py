@@ -13,7 +13,7 @@ import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-sqlPath = 'sqlite:////data/data.db'
+sqlPath = '/data/data.db'
 
 def datetimestrptime(time_string,time_fmt):
      t = time.strptime(time_string,time_fmt)
@@ -186,7 +186,7 @@ class NobelGTServerFactory(WebSocketServerFactory):
             raise Exception("Could not file database data.db in data folder, aborting execution. Database files can be found at https://github.com/NobelGT/NobelGT-databases")
 
     def startFactory(self):
-        self.engine = create_engine(sqlPath, connect_args={'check_same_thread': False})
+        self.engine = create_engine("sqlite:///" + sqlPath, connect_args={'check_same_thread': False})
         self.DBSession = sessionmaker(bind=self.engine)
 
     def stopFactory(self):
