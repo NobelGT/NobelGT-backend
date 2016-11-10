@@ -9,4 +9,4 @@ RUN pip install -r requirements.txt
 VOLUME /data
 EXPOSE 9000
 
-CMD twistd --nodaemon -l --python=run_server.py
+CMD twistd -n -l - -y nobelgt.tac
