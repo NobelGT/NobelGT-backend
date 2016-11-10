@@ -180,8 +180,8 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
 class NobelGTServerFactory(WebSocketServerFactory):
     protocol = NobelGTServerProtocol
 
-    def __init__(self, url):
-        WebSocketServerFactory.__init__(self, url)
+    def __init__(self):
+        WebSocketServerFactory.__init__(self)
         if not os.path.isfile(sqlPath):
             raise Exception("Could not file database data.db in data folder, aborting execution. Database files can be found at https://github.com/NobelGT/NobelGT-databases")
 
@@ -197,7 +197,7 @@ if __name__ == '__main__':
 
     log.startLogging(sys.stdout)
 
-    factory = NobelGTServerFactory(u"ws://127.0.0.1:9000")
+    factory = NobelGTServerFactory()
 
     reactor.listenTCP(9000, factory)
     reactor.run()
