@@ -3,11 +3,9 @@
 
 import datetime
 import time
-
-import config
+import os.path
 from models import Course
-from autobahn.twisted.websocket import WebSocketServerProtocol, \
-    WebSocketServerFactory
+from autobahn.twisted.websocket import WebSocketServerProtocol, WebSocketServerFactory
 from twisted.internet import reactor
 from twisted.python import log
 from solve2 import startSolution
@@ -15,8 +13,7 @@ import json
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-engine = create_engine(config.SQLALCHEMY_DATABASE_URI, connect_args={'check_same_thread': False})
-DBSession = sessionmaker(bind=engine)
+sqlPath = 'sqlite:////data/data.db'
 
 def datetimestrptime(time_string,time_fmt):
      t = time.strptime(time_string,time_fmt)
@@ -27,11 +24,10 @@ class NobelGTServerProtocol(WebSocketServerProtocol):
         WebSocketServerProtocol.__init__(self)
         log.msg(u"[INFO] Starting new protocol instance")
         self.cancelled = False
-        self.session = DBSession()
-
 
     def onConnect(self, request):
         log.msg("Client connecting: {0}".format(request.peer))
+        self.session = self.factory.DBSession()
 
     def onMessage(self, payload, isBinary):
         if not isBinary:
@@ -186,6 +182,15 @@ class NobelGTServerFactory(WebSocketServerFactory):
 
     def __init__(self, url):
         WebSocketServerFactory.__init__(self, url)
+        if not os.path.isfile(sqlPath):
+            raise Exception("Could not file database data.db in data folder, aborting execution. Database files can be found at https://github.com/NobelGT/NobelGT-databases")
+
+    def startFactory(self):
+        self.engine = create_engine(sqlPath, connect_args={'check_same_thread': False})
+        self.DBSession = sessionmaker(bind=self.engine)
+
+    def stopFactory(self):
+        self.engine.dispose()
 
 if __name__ == '__main__':
     import sys

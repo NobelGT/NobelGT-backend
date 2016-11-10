@@ -109,12 +109,3 @@ Location.sessions = relationship(Session, back_populates="location", cascade="al
 Department.courses = relationship(Course, back_populates="department", cascade="all, delete, delete-orphan")
 Course.sections = relationship(Section, back_populates="course", cascade="all, delete, delete-orphan")
 Section.sessions = relationship(Session, back_populates="section", cascade="all, delete, delete-orphan")
-
-engine = create_engine(config.SQLALCHEMY_DATABASE_URI)
-Base.metadata.bind = engine
-Base.metadata.create_all(engine)
-
-DBSession = sessionmaker(bind=engine)
-session = DBSession()
-
-engine.dispose()

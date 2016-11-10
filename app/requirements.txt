@@ -1,0 +1,10 @@
+autobahn==0.16.1
+constantly==15.1.0
+geopy==1.11.0
+incremental==16.10.1
+numpy==1.11.2
+six==1.10.0
+SQLAlchemy==1.1.2
+Twisted==16.5.0
+txaio==2.5.2
+zope.interface==4.3.2
